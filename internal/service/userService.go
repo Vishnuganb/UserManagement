@@ -1,14 +1,15 @@
 package service
 
 import (
-	sqlc "UserManagement/internal/db/sqlc"
-	"UserManagement/internal/model"
-	"UserManagement/internal/util"
-	"UserManagement/internal/validator"
 	"context"
 	"database/sql"
 	"fmt"
 	"log"
+
+	sqlc "UserManagement/internal/db/sqlc"
+	"UserManagement/internal/model"
+	"UserManagement/internal/util"
+	"UserManagement/internal/validator"
 )
 
 type MessageProducer interface {

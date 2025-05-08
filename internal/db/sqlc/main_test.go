@@ -2,10 +2,11 @@ package db
 
 import (
 	"database/sql"
-	_ "github.com/lib/pq" // It needs to use conjunction with a database driver
 	"log"
 	"os"
 	"testing"
+
+	_ "github.com/lib/pq" // It needs to use conjunction with a database driver
 )
 
 const (

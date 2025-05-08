@@ -1,8 +1,9 @@
 package router
 
 import (
+	chi "github.com/go-chi/chi/v5"
+
 	"UserManagement/internal/handler"
-	"github.com/go-chi/chi/v5"
 )
 
 func NewRouter(uh *handler.UserHandler) *chi.Mux {

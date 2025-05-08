@@ -1,16 +1,18 @@
 package main
 
 import (
+	"database/sql"
+	"log"
+	"net/http"
+
+	_ "github.com/lib/pq"
+
 	"UserManagement/internal/handler"
 	"UserManagement/internal/kafka"
 	"UserManagement/internal/router"
 	"UserManagement/internal/service"
 	"UserManagement/internal/validator"
 	"UserManagement/internal/ws"
-	"database/sql"
-	_ "github.com/lib/pq"
-	"log"
-	"net/http"
 )
 
 const (

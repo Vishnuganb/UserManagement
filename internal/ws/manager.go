@@ -1,8 +1,6 @@
 package ws
 
 import (
-	"UserManagement/internal/model"
-	"UserManagement/internal/service"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,6 +9,9 @@ import (
 	"sync"
 
 	"github.com/gorilla/websocket"
+
+	"UserManagement/internal/model"
+	"UserManagement/internal/service"
 )
 
 var (

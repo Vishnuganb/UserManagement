@@ -1,17 +1,17 @@
 package db
 
 import (
-	"UserManagement/internal/util"
 	"context"
 	"database/sql"
-	"github.com/stretchr/testify/require"
-	_ "github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"UserManagement/internal/util"
 )
 
 // The individual tester for a single test function
 func createRandomUser(t *testing.T) User {
-
 	arg := CreateUserParams{
 		FirstName: util.RandomName(),
 		LastName:  util.RandomName(),
@@ -35,7 +35,6 @@ func createRandomUser(t *testing.T) User {
 	require.NotZero(t, user.UserID)
 
 	return user
-
 }
 
 func TestCreateUser(t *testing.T) {
@@ -102,5 +101,4 @@ func TestListUsers(t *testing.T) {
 	for _, user := range users {
 		require.NotEmpty(t, user)
 	}
-
 }

@@ -1,14 +1,16 @@
 package handler
 
 import (
-	"UserManagement/internal/model"
-	"UserManagement/internal/service"
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"github.com/go-chi/chi/v5"
 	"net/http"
 	"strconv"
+
+	chi "github.com/go-chi/chi/v5"
+
+	"UserManagement/internal/model"
+	"UserManagement/internal/service"
 )
 
 type UserHandler struct {

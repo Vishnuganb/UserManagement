@@ -1,10 +1,12 @@
 package kafka
 
 import (
-	"UserManagement/internal/ws"
 	"context"
-	"github.com/segmentio/kafka-go"
 	"log"
+
+	kafka "github.com/segmentio/kafka-go"
+
+	"UserManagement/internal/ws"
 )
 
 func StartConsumer(brokerAddr, topic string, manager *ws.Manager) {

@@ -1,10 +1,12 @@
 package kafka
 
 import (
-	"UserManagement/internal/service"
 	"context"
-	"github.com/segmentio/kafka-go"
 	"log"
+
+	kafka "github.com/segmentio/kafka-go"
+
+	"UserManagement/internal/service"
 )
 
 type Producer struct {
