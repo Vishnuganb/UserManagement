@@ -11,19 +11,17 @@ import (
 	"UserManagement/internal/kafka"
 	"UserManagement/internal/router"
 	"UserManagement/internal/service"
+	"UserManagement/internal/util"
 	"UserManagement/internal/validator"
 	"UserManagement/internal/ws"
 )
 
-const (
-	dbDriver   = "postgres"
-	dbSource   = "postgresql://root:secret@localhost:5433/userManagement?sslmode=disable"
-	brokerAddr = "localhost:9092"
-	topic      = "user_topic"
-)
-
 func main() {
-	conn, err := sql.Open(dbDriver, dbSource)
+	config, err := util.LoadConfig(".")
+	if err != nil {
+		log.Fatal("cannot load config:", err)
+	}
+	conn, err := sql.Open(config.DBDriver, config.DBSource)
 	if err != nil {
 		log.Fatal("cannot connect to the database:", err)
 	}
@@ -33,7 +31,7 @@ func main() {
 	}(conn) // When the main() function finishes then automatically close the connection.
 
 	v := validator.NewValidator()
-	producer := kafka.NewProducer(brokerAddr, topic)
+	producer := kafka.NewProducer(config.KafkaBroker, config.KafkaTopic)
 	us := service.NewUserService(conn, v, producer)
 	uh := handler.NewUserHandler(us)
 	r := router.NewRouter(uh)
@@ -42,7 +40,7 @@ func main() {
 	m := ws.NewManager(us)
 
 	// Start Kafka consumer
-	go kafka.StartConsumer(brokerAddr, topic, m)
+	go kafka.StartConsumer(config.KafkaBroker, config.KafkaTopic, m)
 
 	// Run REST API server on port 8080
 	/*
