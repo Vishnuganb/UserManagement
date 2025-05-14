@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"time"
 
 	sqlc "UserManagement/internal/db/sqlc"
 	"UserManagement/internal/model"
@@ -43,11 +44,18 @@ func NewUserService(db *sql.DB, v Validator, producer MessageProducer) *UserServ
 }
 
 func (s *UserService) listenToChannel() {
-	for req := range s.channel {
-		log.Printf("Processing user creation from channel: %+v\n", req)
-		if err := s.CreateUser(context.Background(), req); err != nil {
-			log.Printf("Error processing user creation from channel: %v\n", err)
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+		select {
+		case req := <-s.channel:
+			log.Printf("Processing user creation from channel: %+v\n", req)
+			if err := s.CreateUser(ctx, req); err != nil {
+				log.Printf("Error processing user creation from channel: %v\n", err)
+			}
+		case <-ctx.Done():
+			log.Println("No messages received in the last 10 seconds")
 		}
+		cancel()
 	}
 }
 
