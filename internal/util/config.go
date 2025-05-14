@@ -19,17 +19,16 @@ type Config struct {
 
 // LoadConfig reads configuration from file or environment variables.
 func LoadConfig(path string) (config Config, err error) {
-	viper.AddConfigPath(path)
-	viper.SetConfigName("app")
-	viper.SetConfigType("env")
+	viper.AddConfigPath(path)  // directory path to search for the config file
+	viper.SetConfigName("app") // looks for app.env
+	viper.SetConfigType("env") // // tells Viper to treat it like key=value format
 
-	viper.AutomaticEnv()
-
-	err = viper.ReadInConfig()
+	viper.AutomaticEnv()       // So this line makes it possible to override .env values using system environment variables — useful in Docker, CI/CD, etc.
+	err = viper.ReadInConfig() // Try to read the configuration file — like app.env — from the path I gave earlier.
 	if err != nil {
 		return
 	}
 
-	err = viper.Unmarshal(&config)
+	err = viper.Unmarshal(&config) // // maps values from config to struct fields using `mapstructure` tags
 	return
 }

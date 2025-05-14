@@ -10,8 +10,8 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	sqlc "UserManagement/internal/db/sqlc"
 	"UserManagement/internal/model"
-	"UserManagement/internal/service"
 )
 
 var (
@@ -22,14 +22,22 @@ var (
 	}
 )
 
+type UserService interface {
+	CreateUser(ctx context.Context, req model.CreateUserRequest) error
+	GetUsers(ctx context.Context) ([]sqlc.User, error)
+	GetUserById(ctx context.Context, userId int64) (sqlc.User, error)
+	DeleteUser(ctx context.Context, userId int64) error
+	UpdateUser(ctx context.Context, userId int64, req model.UpdateUserRequest) (sqlc.User, error)
+}
+
 type Manager struct {
-	UserService  *service.UserService
+	UserService  UserService
 	clients      ClientList
 	sync.RWMutex // Only one goroutine reads per client, but many clients → many goroutines reading clients map at the same time
 	handlers     map[string]MessageHandler
 }
 
-func NewManager(us *service.UserService) *Manager {
+func NewManager(us UserService) *Manager {
 	m := &Manager{
 		UserService: us,
 		clients:     make(ClientList),

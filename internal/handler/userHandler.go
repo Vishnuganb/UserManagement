@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -9,15 +10,23 @@ import (
 
 	chi "github.com/go-chi/chi/v5"
 
+	sqlc "UserManagement/internal/db/sqlc"
 	"UserManagement/internal/model"
-	"UserManagement/internal/service"
 )
 
-type UserHandler struct {
-	us *service.UserService
+type UserService interface {
+	CreateUser(ctx context.Context, req model.CreateUserRequest) error
+	GetUsers(ctx context.Context) ([]sqlc.User, error)
+	GetUserById(ctx context.Context, userId int64) (sqlc.User, error)
+	DeleteUser(ctx context.Context, userId int64) error
+	UpdateUser(ctx context.Context, userId int64, req model.UpdateUserRequest) (sqlc.User, error)
 }
 
-func NewUserHandler(us *service.UserService) *UserHandler {
+type UserHandler struct {
+	us UserService
+}
+
+func NewUserHandler(us UserService) *UserHandler {
 	return &UserHandler{us: us}
 }
 

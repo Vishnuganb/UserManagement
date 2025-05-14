@@ -9,21 +9,24 @@ import (
 	sqlc "UserManagement/internal/db/sqlc"
 	"UserManagement/internal/model"
 	"UserManagement/internal/util"
-	"UserManagement/internal/validator"
 )
 
 type MessageProducer interface {
 	Publish(key, value string) error
 }
 
+type Validator interface {
+	ValidateCreateUser(firstName, lastName, email string) error
+}
+
 type UserService struct {
 	db       *sql.DB
-	v        *validator.Validator
+	v        Validator
 	q        *sqlc.Queries
 	producer MessageProducer
 }
 
-func NewUserService(db *sql.DB, v *validator.Validator, producer MessageProducer) *UserService {
+func NewUserService(db *sql.DB, v Validator, producer MessageProducer) *UserService {
 	return &UserService{
 		db:       db,
 		v:        v,
@@ -113,7 +116,6 @@ func (s *UserService) GetUsers(ctx context.Context) ([]sqlc.User, error) {
 }
 
 func (s *UserService) GetUserById(ctx context.Context, userId int64) (sqlc.User, error) {
-
 	/*
 
 		query := `SELECT * FROM users WHERE user_id = $1`
@@ -154,7 +156,6 @@ func (s *UserService) DeleteUser(ctx context.Context, userId int64) error {
 }
 
 func (s *UserService) UpdateUser(ctx context.Context, userId int64, req model.UpdateUserRequest) (sqlc.User, error) {
-
 	/*
 		query := `
 			UPDATE users
