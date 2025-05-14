@@ -20,9 +20,9 @@ func (v *Validator) ValidateCreateUser(firstName, lastName, email string) error 
 	if strings.TrimSpace(firstName) == "" || strings.TrimSpace(lastName) == "" {
 		return errors.New("firstName or lastName is empty")
 	}
-	log.Println(firstName, email)
 	if !emailRegex.MatchString(email) {
 		return errors.New("email is invalid")
 	}
+	log.Println("User validated", firstName, email)
 	return nil
 }

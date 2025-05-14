@@ -28,6 +28,7 @@ type UserService interface {
 	GetUserById(ctx context.Context, userId int64) (sqlc.User, error)
 	DeleteUser(ctx context.Context, userId int64) error
 	UpdateUser(ctx context.Context, userId int64, req model.UpdateUserRequest) (sqlc.User, error)
+	SendToChannel(req model.CreateUserRequest)
 }
 
 type Manager struct {
@@ -145,11 +146,13 @@ func (m *Manager) Broadcast(msgType string, data interface{}) {
 func (m *Manager) handleCreateUser(message Message, c *Client) error {
 	var req model.CreateUserRequest
 	decodePayload(message.Payload, &req)
-
-	if err := m.UserService.CreateUser(context.Background(), req); err != nil {
-		m.sendError(c.conn, "create_user_response", err.Error())
-		return err
-	}
+	m.UserService.SendToChannel(req)
+	/*
+		if err := m.UserService.CreateUser(context.Background(), req); err != nil {
+			m.sendError(c.conn, "create_user_response", err.Error())
+			return err
+		}
+	*/
 	//m.Broadcast("user_list_updated", "A new user was created")
 	return nil
 }

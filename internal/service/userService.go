@@ -24,14 +24,30 @@ type UserService struct {
 	v        Validator
 	q        *sqlc.Queries
 	producer MessageProducer
+	channel  chan model.CreateUserRequest
 }
 
 func NewUserService(db *sql.DB, v Validator, producer MessageProducer) *UserService {
-	return &UserService{
+	us := &UserService{
 		db:       db,
 		v:        v,
 		q:        sqlc.New(db),
 		producer: producer,
+		channel:  make(chan model.CreateUserRequest),
+	}
+
+	// Start a goroutine to listen for messages on the channel
+	go us.listenToChannel()
+
+	return us
+}
+
+func (s *UserService) listenToChannel() {
+	for req := range s.channel {
+		log.Printf("Processing user creation from channel: %+v\n", req)
+		if err := s.CreateUser(context.Background(), req); err != nil {
+			log.Printf("Error processing user creation from channel: %v\n", err)
+		}
 	}
 }
 
@@ -75,6 +91,11 @@ func (s *UserService) CreateUser(ctx context.Context, req model.CreateUserReques
 	}
 
 	return nil
+}
+
+// SendToChannel Add a method to send messages to the channel
+func (s *UserService) SendToChannel(req model.CreateUserRequest) {
+	s.channel <- req
 }
 
 func (s *UserService) GetUsers(ctx context.Context) ([]sqlc.User, error) {

@@ -20,6 +20,7 @@ type UserService interface {
 	GetUserById(ctx context.Context, userId int64) (sqlc.User, error)
 	DeleteUser(ctx context.Context, userId int64) error
 	UpdateUser(ctx context.Context, userId int64, req model.UpdateUserRequest) (sqlc.User, error)
+	SendToChannel(req model.CreateUserRequest)
 }
 
 type UserHandler struct {
@@ -36,10 +37,14 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	err := h.us.CreateUser(r.Context(), req)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-	}
+	// Send the request to the channel for asynchronous processing
+	h.us.SendToChannel(req)
+	/*
+		err := h.us.CreateUser(r.Context(), req)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+	*/
 	w.WriteHeader(http.StatusCreated)
 }
 
