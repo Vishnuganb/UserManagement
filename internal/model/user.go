@@ -18,3 +18,14 @@ type UpdateUserRequest struct {
 	Age       *int32  `json:"age"`
 	Status    *string `json:"status"`
 }
+
+type CUDRequest struct {
+	Type      string
+	CreateReq CreateUserRequest
+	UpdateReq struct {
+		UserID int64
+		Req    UpdateUserRequest
+	}
+	UserID       int64
+	ResponseChannel chan interface{}
+}

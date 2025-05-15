@@ -1,7 +1,6 @@
 package ws
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"log"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	sqlc "UserManagement/internal/db/sqlc"
 	"UserManagement/internal/model"
 )
 
@@ -23,18 +21,13 @@ var (
 )
 
 type UserService interface {
-	CreateUser(ctx context.Context, req model.CreateUserRequest) error
-	GetUsers(ctx context.Context) ([]sqlc.User, error)
-	GetUserById(ctx context.Context, userId int64) (sqlc.User, error)
-	DeleteUser(ctx context.Context, userId int64) error
-	UpdateUser(ctx context.Context, userId int64, req model.UpdateUserRequest) (sqlc.User, error)
-	SendToChannel(req model.CreateUserRequest)
+	QueueCUDRequest(req model.CUDRequest)
 }
 
 type Manager struct {
 	UserService  UserService
 	clients      ClientList
-	sync.RWMutex // Only one goroutine reads per client, but many clients → many goroutines reading clients map at the same time
+	sync.RWMutex
 	handlers     map[string]MessageHandler
 }
 
@@ -70,7 +63,6 @@ func (m *Manager) routeEvent(message Message, c *Client) error {
 func (m *Manager) ServeWS(w http.ResponseWriter, r *http.Request) {
 	log.Println("new connection")
 	// upgrade regular http connection into websocket
-	// Manager gets the request from web then it will upgrade the http connection to websocket connection
 	conn, err := websocketUpgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println(err)
@@ -79,19 +71,7 @@ func (m *Manager) ServeWS(w http.ResponseWriter, r *http.Request) {
 	client := NewClient(conn, m)
 	m.addClient(client)
 
-	/*
-	 Start client process
-	 We use go to start client.readMessages() in a new goroutine,
-	 so it runs concurrently (in the background) without blocking the rest of the server.
-	*/
 	go client.readMessages()
-	/*
-		You use only one goroutine to write, but:
-
-		many different parts of your server might want to send messages to that client.
-		If they all call conn.WriteMessage(...) directly, that’s dangerous —
-		even if there's only one goroutine actually doing it at a time, you can't easily control that across your whole app.
-	*/
 	go client.writeMessages()
 }
 
@@ -132,7 +112,7 @@ func checkOrigin(r *http.Request) bool {
 	}
 }
 
-func (m *Manager) Broadcast(msgType string, data interface{}) {
+func (m *Manager) Broadcast(msgType string) {
 	m.RLock()
 	defer m.RUnlock()
 	for client := range m.clients {
@@ -146,33 +126,57 @@ func (m *Manager) Broadcast(msgType string, data interface{}) {
 func (m *Manager) handleCreateUser(message Message, c *Client) error {
 	var req model.CreateUserRequest
 	decodePayload(message.Payload, &req)
-	m.UserService.SendToChannel(req)
-	/*
-		if err := m.UserService.CreateUser(context.Background(), req); err != nil {
-			m.sendError(c.conn, "create_user_response", err.Error())
-			return err
-		}
-	*/
+	responseChan := make(chan interface{})
+	cudReq := model.CUDRequest{
+		Type:            "create_user",
+		CreateReq:       req,
+		ResponseChannel: responseChan,
+	}
+	m.UserService.QueueCUDRequest(cudReq)
+	response := <-responseChan
+	if err, ok := response.(error); ok {
+		m.sendError(c.conn, "get_user_response", err.Error())
+		return err
+	}
 	//m.Broadcast("user_list_updated", "A new user was created")
 	return nil
 }
 
 func (m *Manager) handleGetUsers(_ Message, c *Client) error {
-	users, err := m.UserService.GetUsers(context.Background())
-	if err != nil {
-		m.sendError(c.conn, "get_users_response", err.Error())
+	responseChan := make(chan interface{})
+	cudReq := model.CUDRequest{
+		Type:            "get_users",
+		ResponseChannel: responseChan,
+	}
+	m.UserService.QueueCUDRequest(cudReq)
+	response := <-responseChan
+	if err, ok := response.(error); ok {
+		m.sendError(c.conn, "get_user_response", err.Error())
 		return err
 	}
-	m.sendSuccess(c.conn, "get_users_response", users)
+	m.sendSuccess(c.conn, "get_users_response", response)
 	return nil
 }
 
 func (m *Manager) handleUpdateUser(message Message, c *Client) error {
 	var req model.UpdateUserRequest
 	decodePayload(message.Payload, &req)
-	userId := message.Payload.(map[string]interface{})["user_id"].(int64)
-
-	if _, err := m.UserService.UpdateUser(context.Background(), userId, req); err != nil {
+	userID := message.Payload.(map[string]interface{})["user_id"].(int64)
+	responseChan := make(chan interface{})
+	cudReq := model.CUDRequest{
+		Type: "update_user",
+		UpdateReq: struct {
+			UserID int64
+			Req    model.UpdateUserRequest
+		}{
+			UserID: userID,
+			Req:    req,
+		},
+		ResponseChannel: responseChan,
+	}
+	m.UserService.QueueCUDRequest(cudReq)
+	response := <-responseChan
+	if err, ok := response.(error); ok {
 		m.sendError(c.conn, "update_user_response", err.Error())
 		return err
 	}
@@ -181,11 +185,21 @@ func (m *Manager) handleUpdateUser(message Message, c *Client) error {
 }
 
 func (m *Manager) handleDeleteUser(message Message, c *Client) error {
-	userId := message.Payload.(map[string]interface{})["user_id"].(int64)
-	if err := m.UserService.DeleteUser(context.Background(), userId); err != nil {
+	userID := message.Payload.(map[string]interface{})["user_id"].(int64)
+	responseChan := make(chan interface{})
+	cudReq := model.CUDRequest{
+		Type:            "delete_user",
+		UserID:       userID,
+		ResponseChannel: responseChan,
+	}
+	m.UserService.QueueCUDRequest(cudReq)
+	response := <-responseChan
+	// Check if the response is an error
+	if err, ok := response.(error); ok {
 		m.sendError(c.conn, "delete_user_response", err.Error())
 		return err
 	}
+	// If not an error, send success
 	m.sendSuccess(c.conn, "delete_user_response", "User deleted successfully")
 	return nil
 }

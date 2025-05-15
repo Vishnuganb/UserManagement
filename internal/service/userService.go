@@ -1,15 +1,14 @@
 package service
 
 import (
+	sqlc "UserManagement/internal/db/sqlc"
+	"UserManagement/internal/model"
+	"UserManagement/internal/util"
 	"context"
 	"database/sql"
 	"fmt"
 	"log"
 	"time"
-
-	sqlc "UserManagement/internal/db/sqlc"
-	"UserManagement/internal/model"
-	"UserManagement/internal/util"
 )
 
 type MessageProducer interface {
@@ -25,37 +24,72 @@ type UserService struct {
 	v        Validator
 	q        *sqlc.Queries
 	producer MessageProducer
-	channel  chan model.CreateUserRequest
+	channel  chan model.CUDRequest
 }
 
-func NewUserService(db *sql.DB, v Validator, producer MessageProducer) *UserService {
+func NewUserService(ctx context.Context, db *sql.DB, v Validator, producer MessageProducer) *UserService {
 	us := &UserService{
 		db:       db,
 		v:        v,
 		q:        sqlc.New(db),
 		producer: producer,
-		channel:  make(chan model.CreateUserRequest),
+		channel:  make(chan model.CUDRequest, 100), // Buffered channel to handle multiple requests
 	}
 
 	// Start a goroutine to listen for messages on the channel
-	go us.listenToChannel()
+	go us.listenToChannel(ctx)
 
 	return us
 }
 
-func (s *UserService) listenToChannel() {
+func (s *UserService) listenToChannel(ctx context.Context) {
 	for {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		select {
 		case req := <-s.channel:
-			log.Printf("Processing user creation from channel: %+v\n", req)
-			if err := s.CreateUser(ctx, req); err != nil {
-				log.Printf("Error processing user creation from channel: %v\n", err)
+			switch req.Type {
+			case "create_user":
+				log.Printf("Processing user creation from channel: %+v\n", req.CreateReq)
+				if err := s.CreateUser(ctx, req.CreateReq); err != nil {
+					log.Printf("Error processing user creation from channel: %v\n", err)
+					req.ResponseChannel <- err
+				}
+			case "update_user":
+				log.Printf("Processing user update from channel: %+v\n", req.UpdateReq)
+				if _, err := s.UpdateUser(ctx, req.UpdateReq.UserID, req.UpdateReq.Req); err != nil {
+					log.Printf("Error processing user update: %v\n", err)
+					req.ResponseChannel <- err
+				}
+			case "delete_user":
+				log.Printf("Processing user deletion from channel: %+v\n", req.UserID)
+				if err := s.DeleteUser(ctx, req.UserID); err != nil {
+					log.Printf("Error processing user deletion: %v\n", err)
+					req.ResponseChannel <- err
+				}
+			case "get_users":
+				log.Printf("Processing get users request from channel")
+				users, err := s.GetUsers(ctx)
+				if err != nil {
+					log.Printf("Error processing get users request: %v\n", err)
+					req.ResponseChannel <- err
+				} else {
+					req.ResponseChannel <- users
+				}
+			case "get_user":
+				log.Printf("Processing get user request from channel: %+v\n", req.UserID)
+				user, err := s.GetUserById(ctx, req.UserID)
+				if err != nil {
+					log.Printf("Error processing get user request: %v\n", err)
+					req.ResponseChannel <- err
+				} else {
+					req.ResponseChannel <- user
+				}
 			}
+
 		case <-ctx.Done():
-			log.Println("No messages received in the last 10 seconds")
+			log.Println("Context canceled, stopping channel listener")
+			s.channel = nil // Set channel to nil to indicate no listener
+			return
 		}
-		cancel()
 	}
 }
 
@@ -63,6 +97,11 @@ func (s *UserService) CreateUser(ctx context.Context, req model.CreateUserReques
 	if err := s.v.ValidateCreateUser(req.FirstName, req.LastName, req.Email); err != nil {
 		return err
 	}
+
+	// Create a new context with a deadline
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
 	arg := sqlc.CreateUserParams{
 		FirstName: req.FirstName,
 		LastName:  req.LastName,
@@ -80,13 +119,6 @@ func (s *UserService) CreateUser(ctx context.Context, req model.CreateUserReques
 			Valid:  req.Status != "",
 		},
 	}
-	/*
-		query := `INSERT INTO users (first_name, last_name, email, phone, age, status)
-		VALUES ($1, $2, $3, $4, $5, $6)`
-
-		_, err := s.db.ExecContext(ctx, query, req.FirstName, req.LastName, req.Email, req.Phone, req.Age, req.Status)
-
-	*/
 	_, err := s.q.CreateUser(ctx, arg)
 	if err != nil {
 		return err
@@ -101,114 +133,44 @@ func (s *UserService) CreateUser(ctx context.Context, req model.CreateUserReques
 	return nil
 }
 
-// SendToChannel Add a method to send messages to the channel
-func (s *UserService) SendToChannel(req model.CreateUserRequest) {
-	s.channel <- req
+// QueueCUDRequest SendToChannel Add a method to send messages to the channel
+func (s *UserService) QueueCUDRequest(req model.CUDRequest) {
+	if s.channel == nil {
+		log.Println("No active listener on the channel, dropping request")
+		return
+	}
+	select {
+	case s.channel <- req:
+		log.Println("Request queued successfully")
+	case <-time.After(3 * time.Second):
+		log.Println("Timeout: failed to queue request")
+	}
 }
 
 func (s *UserService) GetUsers(ctx context.Context) ([]sqlc.User, error) {
-	/*
-		query := `SELECT * FROM users`
-			rows, err := s.db.QueryContext(ctx, query)
-			if err != nil {
-				return nil, err
-			}
-			defer rows.Close()
-
-			var users []model.User
-
-			for rows.Next() {
-				var user model.User
-				err := rows.Scan( //  Save Current Row into Go variables
-					&user.UserID,
-					&user.FirstName,
-					&user.LastName,
-					&user.Email,
-					&user.Phone,
-					&user.Age,
-					&user.Status,
-					&user.CreatedAt,
-					&user.UpdatedAt)
-				if err != nil {
-					return nil, err
-				}
-				users = append(users, user)
-			}
-
-			if err := rows.Err(); err != nil {
-				return nil, err
-			}
-
-	*/
+	// Create a new context with a deadline
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	users, err := s.q.ListUsers(ctx)
 	return users, err
 }
 
 func (s *UserService) GetUserById(ctx context.Context, userId int64) (sqlc.User, error) {
-	/*
-
-		query := `SELECT * FROM users WHERE user_id = $1`
-		row := s.db.QueryRowContext(ctx, query, userId)
-		var user model.User
-		err := row.Scan(
-			&user.UserID,
-			&user.FirstName,
-			&user.LastName,
-			&user.Email,
-			&user.Phone,
-			&user.Age,
-			&user.Status,
-			&user.CreatedAt,
-			&user.UpdatedAt)
-
-		if err != nil {
-			return model.User{}, err
-		}
-
-	*/
-
+	// Create a new context with a deadline
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	user, err := s.q.GetUser(ctx, userId)
-
 	return user, err
 }
 
 func (s *UserService) DeleteUser(ctx context.Context, userId int64) error {
-	/*
-		query := `DELETE FROM users WHERE user_id=$1`
-		_, err := s.db.ExecContext(ctx, query, userId)
-		if err != nil {
-			return err
-		}
-		return nil
-	*/
+	// Create a new context with a deadline
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	return s.q.DeleteUser(ctx, userId)
 }
 
 func (s *UserService) UpdateUser(ctx context.Context, userId int64, req model.UpdateUserRequest) (sqlc.User, error) {
-	/*
-		query := `
-			UPDATE users
-			SET
-				first_name = COALESCE(NULLIF($1, ''), first_name),
-				last_name = COALESCE(NULLIF($2, ''), last_name),
-				email = COALESCE(NULLIF($3, ''), email),
-				phone = COALESCE(NULLIF($4, ''), phone),
-				age = COALESCE($5, age),
-				status = COALESCE(NULLIF($6, ''), status),
-				updated_at = NOW()
-			WHERE user_id = $7
-			`
-
-		_, err := s.db.ExecContext(ctx, query,
-			util.NullSafeString(req.FirstName),
-			util.NullSafeString(req.LastName),
-			util.NullSafeString(req.Email),
-			util.NullSafeString(req.Phone),
-			util.NullSafeInt32(req.Age),
-			util.NullSafeString(req.Status),
-			userId,
-		)
-	*/
 	arg := sqlc.UpdateUserParams{
 		UserID: userId,
 		FirstName: sql.NullString{
@@ -236,6 +198,10 @@ func (s *UserService) UpdateUser(ctx context.Context, userId int64, req model.Up
 			Valid:  req.Status != nil,
 		},
 	}
+
+	// Create a new context with a deadline
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 
 	user, err := s.q.UpdateUser(ctx, arg)
 	return user, err

@@ -1,26 +1,20 @@
 package handler
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 
 	chi "github.com/go-chi/chi/v5"
 
-	sqlc "UserManagement/internal/db/sqlc"
 	"UserManagement/internal/model"
 )
 
 type UserService interface {
-	CreateUser(ctx context.Context, req model.CreateUserRequest) error
-	GetUsers(ctx context.Context) ([]sqlc.User, error)
-	GetUserById(ctx context.Context, userId int64) (sqlc.User, error)
-	DeleteUser(ctx context.Context, userId int64) error
-	UpdateUser(ctx context.Context, userId int64, req model.UpdateUserRequest) (sqlc.User, error)
-	SendToChannel(req model.CreateUserRequest)
+	QueueCUDRequest(req model.CUDRequest)
 }
 
 type UserHandler struct {
@@ -38,27 +32,32 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Send the request to the channel for asynchronous processing
-	h.us.SendToChannel(req)
-	/*
-		err := h.us.CreateUser(r.Context(), req)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		}
-	*/
+	responseChan := make(chan interface{})
+	cudReq := model.CUDRequest{
+		Type:            "create_user",
+		CreateReq:       req,
+		ResponseChannel: responseChan,
+	}
+	h.us.QueueCUDRequest(cudReq)
+	response := <-responseChan
+	if err, ok := response.(error); ok {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
 	w.WriteHeader(http.StatusCreated)
 }
 
-func (h *UserHandler) GetUsers(w http.ResponseWriter, r *http.Request) {
-	res, err := h.us.GetUsers(r.Context())
-	if err != nil {
+func (h *UserHandler) GetUsers(w http.ResponseWriter, _ *http.Request) {
+	responseChan := make(chan interface{})
+	cudReq := model.CUDRequest{
+		Type:            "get_users",
+		ResponseChannel: responseChan,
+	}
+	h.us.QueueCUDRequest(cudReq)
+	response := <-responseChan
+	if err, ok := response.(error); ok {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	err = json.NewEncoder(w).Encode(res)
-	if err != nil {
-		return
-	}
+	writeJSON(w, response)
 }
 
 func (h *UserHandler) GetUserById(w http.ResponseWriter, r *http.Request) {
@@ -69,15 +68,36 @@ func (h *UserHandler) GetUserById(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid user ID", http.StatusBadRequest)
 		return
 	}
-	res, err := h.us.GetUserById(r.Context(), userID)
-	if err != nil {
+	responseChan := make(chan interface{})
+	cudReq := model.CUDRequest{
+		Type:            "get_user",
+		UserID:          userID,
+		ResponseChannel: responseChan,
+	}
+	h.us.QueueCUDRequest(cudReq)
+	response := <-responseChan
+	if err, ok := response.(error); ok {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
+	writeJSON(w, response)
+}
+
+func writeJSON(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	err = json.NewEncoder(w).Encode(res)
-	if err != nil {
-		return
+	switch v := data.(type) {
+	case error:
+		w.WriteHeader(http.StatusBadRequest) // Use 400 for errors
+		response := map[string]string{"error": v.Error()}
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			log.Println("Failed to encode error response:", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		}
+	default:
+		w.WriteHeader(http.StatusOK) // Use 200 for successful responses
+		if err := json.NewEncoder(w).Encode(data); err != nil {
+			log.Println("Failed to encode response:", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		}
 	}
 }
 
@@ -89,14 +109,20 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid user ID", http.StatusBadRequest)
 		return
 	}
-	err = h.us.DeleteUser(r.Context(), userID)
-	if err != nil {
+	responseChan := make(chan interface{})
+	cudReq := model.CUDRequest{
+		Type:            "delete_user",
+		UserID:          userID,
+		ResponseChannel: responseChan,
+	}
+	h.us.QueueCUDRequest(cudReq)
+	response := <-responseChan
+	if err, ok := response.(error); ok {
 		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "User Not Found", http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
-		return
 	}
 	w.WriteHeader(http.StatusOK)
 }
@@ -114,14 +140,26 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	_, err = h.us.UpdateUser(r.Context(), userID, req)
-	if err != nil {
+	responseChan := make(chan interface{})
+	cudReq := model.CUDRequest{
+		Type: "update_user",
+		UpdateReq: struct {
+			UserID int64
+			Req    model.UpdateUserRequest
+		}{
+			UserID: userID,
+			Req:    req,
+		},
+		ResponseChannel: responseChan,
+	}
+	h.us.QueueCUDRequest(cudReq)
+	response := <-responseChan
+	if err, ok := response.(error); ok {
 		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "User Not Found", http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
-		return
 	}
 	w.WriteHeader(http.StatusOK)
 }
