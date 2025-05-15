@@ -53,8 +53,7 @@ func main() {
 		}
 	}()
 
-
-	http.HandleFunc("/ws_users", m.ServeWS) // Handle WebSocket connection
+	http.HandleFunc("/ws_users", m.ServeWS)           // Handle WebSocket connection
 	log.Println("Starting WebSocket server at :8082") // Run WebSocket server on port 8082
 	err = http.ListenAndServe(":8082", nil)
 	if err != nil {

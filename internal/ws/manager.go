@@ -25,10 +25,10 @@ type UserService interface {
 }
 
 type Manager struct {
-	UserService  UserService
-	clients      ClientList
+	UserService UserService
+	clients     ClientList
 	sync.RWMutex
-	handlers     map[string]MessageHandler
+	handlers map[string]MessageHandler
 }
 
 func NewManager(us UserService) *Manager {
@@ -65,7 +65,7 @@ func (m *Manager) ServeWS(w http.ResponseWriter, r *http.Request) {
 	// upgrade regular http connection into websocket
 	conn, err := websocketUpgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Println(err)
+		log.Println("Couldn't able to upgrade", err)
 		return
 	}
 	client := NewClient(conn, m)
@@ -189,7 +189,7 @@ func (m *Manager) handleDeleteUser(message Message, c *Client) error {
 	responseChan := make(chan interface{})
 	cudReq := model.CUDRequest{
 		Type:            "delete_user",
-		UserID:       userID,
+		UserID:          userID,
 		ResponseChannel: responseChan,
 	}
 	m.UserService.QueueCUDRequest(cudReq)

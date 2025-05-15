@@ -26,6 +26,6 @@ type CUDRequest struct {
 		UserID int64
 		Req    UpdateUserRequest
 	}
-	UserID       int64
+	UserID          int64
 	ResponseChannel chan interface{}
 }

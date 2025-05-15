@@ -20,7 +20,7 @@ type ClientList map[*Client]bool
 type Client struct {
 	conn    *websocket.Conn
 	manager *Manager
-	egress chan Message //[]byte
+	egress  chan Message //[]byte
 }
 
 func NewClient(conn *websocket.Conn, manager *Manager) *Client {
