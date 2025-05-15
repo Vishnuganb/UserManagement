@@ -60,7 +60,6 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		Type:      "create_user",
 		CreateReq: req,
 	}
-	h.us.QueueCUDRequest(cudReq)
 	h.handleRequest(w, cudReq, http.StatusCreated)
 }
 

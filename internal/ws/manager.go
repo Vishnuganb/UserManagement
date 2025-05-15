@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 
@@ -123,46 +124,46 @@ func (m *Manager) Broadcast(msgType string) {
 	}
 }
 
-func (m *Manager) handleCreateUser(message Message, c *Client) error {
-	var req model.CreateUserRequest
-	decodePayload(message.Payload, &req)
+func (m *Manager) handleWebSocketRequest(c *Client, cudReq model.CUDRequest, successMsgType string, successMsg interface{}) error {
 	responseChan := make(chan interface{})
-	cudReq := model.CUDRequest{
-		Type:            "create_user",
-		CreateReq:       req,
-		ResponseChannel: responseChan,
-	}
+	cudReq.ResponseChannel = responseChan
 	m.UserService.QueueCUDRequest(cudReq)
-	response := <-responseChan
-	if err, ok := response.(error); ok {
-		m.sendError(c.conn, "get_user_response", err.Error())
-		return err
+
+	select {
+	case response := <-responseChan:
+		if err, ok := response.(error); ok {
+			m.sendError(c.conn, successMsgType+"_response", err.Error())
+			return err
+		}
+		m.sendSuccess(c.conn, successMsgType+"_response", successMsg)
+	case <-time.After(5 * time.Second): // Timeout after 5 seconds
+		m.sendError(c.conn, successMsgType+"_response", "Request timed out")
+		return errors.New("request timed out")
 	}
-	//m.Broadcast("user_list_updated", "A new user was created")
 	return nil
 }
 
-func (m *Manager) handleGetUsers(_ Message, c *Client) error {
-	responseChan := make(chan interface{})
+func (m *Manager) handleCreateUser(message Message, c *Client) error {
+	var req model.CreateUserRequest
+	decodePayload(message.Payload, &req)
 	cudReq := model.CUDRequest{
-		Type:            "get_users",
-		ResponseChannel: responseChan,
+		Type:      "create_user",
+		CreateReq: req,
 	}
-	m.UserService.QueueCUDRequest(cudReq)
-	response := <-responseChan
-	if err, ok := response.(error); ok {
-		m.sendError(c.conn, "get_user_response", err.Error())
-		return err
+	return m.handleWebSocketRequest(c, cudReq, "create_user", "User created successfully")
+}
+
+func (m *Manager) handleGetUsers(_ Message, c *Client) error {
+	cudReq := model.CUDRequest{
+		Type: "get_users",
 	}
-	m.sendSuccess(c.conn, "get_users_response", response)
-	return nil
+	return m.handleWebSocketRequest(c, cudReq, "get_users", nil)
 }
 
 func (m *Manager) handleUpdateUser(message Message, c *Client) error {
 	var req model.UpdateUserRequest
 	decodePayload(message.Payload, &req)
 	userID := message.Payload.(map[string]interface{})["user_id"].(int64)
-	responseChan := make(chan interface{})
 	cudReq := model.CUDRequest{
 		Type: "update_user",
 		UpdateReq: struct {
@@ -172,36 +173,17 @@ func (m *Manager) handleUpdateUser(message Message, c *Client) error {
 			UserID: userID,
 			Req:    req,
 		},
-		ResponseChannel: responseChan,
 	}
-	m.UserService.QueueCUDRequest(cudReq)
-	response := <-responseChan
-	if err, ok := response.(error); ok {
-		m.sendError(c.conn, "update_user_response", err.Error())
-		return err
-	}
-	m.sendSuccess(c.conn, "update_user_response", "User updated successfully")
-	return nil
+	return m.handleWebSocketRequest(c, cudReq, "update_user", "User updated successfully")
 }
 
 func (m *Manager) handleDeleteUser(message Message, c *Client) error {
 	userID := message.Payload.(map[string]interface{})["user_id"].(int64)
-	responseChan := make(chan interface{})
 	cudReq := model.CUDRequest{
-		Type:            "delete_user",
-		UserID:          userID,
-		ResponseChannel: responseChan,
+		Type:   "delete_user",
+		UserID: userID,
 	}
-	m.UserService.QueueCUDRequest(cudReq)
-	response := <-responseChan
-	// Check if the response is an error
-	if err, ok := response.(error); ok {
-		m.sendError(c.conn, "delete_user_response", err.Error())
-		return err
-	}
-	// If not an error, send success
-	m.sendSuccess(c.conn, "delete_user_response", "User deleted successfully")
-	return nil
+	return m.handleWebSocketRequest(c, cudReq, "delete_user", "User deleted successfully")
 }
 
 func (m *Manager) sendSuccess(conn *websocket.Conn, msgType string, data interface{}) {
