@@ -53,7 +53,7 @@ services:
         apk add --no-cache postgresql-client
         until psql -h postgres -U root -c '\dt'; do echo "waiting for postgres..."; sleep 1; done
         go install github.com/air-verse/air@latest
-        air
+        air --build.cmd "go build -o ./tmp/main ./cmd/server" --build.bin "./tmp/main"
 
 volumes:
   postgres-data:
