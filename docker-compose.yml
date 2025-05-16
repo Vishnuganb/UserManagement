@@ -31,7 +31,8 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
 
   usermanagement:
@@ -50,13 +51,14 @@ services:
       DB_SOURCE: "postgresql://root:secret@postgres:5432/root?sslmode=disable"
       KAFKA_BROKER: kafka:9092
       KAFKA_TOPIC: user_events
+      PGPASSWORD: secret
     entrypoint:
       - sh
       - -c
       - |
         set -xe
         until psql -h postgres -U root -c '\dt'; do echo "waiting for postgres..."; sleep 1; done
-        ./UserManagement    
+        /app/main   
 
 volumes:
   postgres-data:
