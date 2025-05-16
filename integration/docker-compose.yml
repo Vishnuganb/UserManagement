@@ -1,0 +1,59 @@
+services:
+  postgres:
+    container_name: postgressContainer
+    image: postgres:latest
+    restart: always
+    env_file:
+      - compose/postgres.env
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    env_file:
+      - compose/kafka.env
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  usermanagement:
+    image: golang:1.24-alpine # Use the prebuilt Go image
+    container_name: userManagementApp
+    depends_on:
+      - postgres
+      - kafka
+    ports:
+      - "8080:8080"
+      - "8082:8082"
+    env_file:
+      - compose/common.env
+    volumes:
+      - ../:/app # Mount the project directory into the container
+    restart:
+        unless-stopped
+    working_dir: /app
+    entrypoint:
+      - sh
+      - -c
+      - |
+        set -xe
+        apk add --no-cache postgresql-client
+        until psql -h postgres -U root -c '\dt'; do echo "waiting for postgres..."; sleep 1; done
+        go install github.com/air-verse/air@latest
+        air
+
+volumes:
+  postgres-data:

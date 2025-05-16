@@ -1,4 +1,4 @@
-package integration
+package suite
 
 import (
 	"bytes"
