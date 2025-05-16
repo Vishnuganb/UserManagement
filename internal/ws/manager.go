@@ -62,7 +62,7 @@ func (m *Manager) routeEvent(message Message, c *Client) error {
 }
 
 func (m *Manager) ServeWS(w http.ResponseWriter, r *http.Request) {
-	log.Println("new connection")
+	log.Println("new WS Connection")
 	// upgrade regular http connection into websocket
 	conn, err := websocketUpgrader.Upgrade(w, r, nil)
 	if err != nil {

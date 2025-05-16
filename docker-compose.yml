@@ -34,5 +34,29 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
 
+  usermanagement:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: userManagementApp
+    depends_on:
+      - postgres
+      - kafka
+    ports:
+      - "8080:8080"
+      - "8082:8082"
+    environment:
+      DB_DRIVER: postgres
+      DB_SOURCE: "postgresql://root:secret@postgres:5432/root?sslmode=disable"
+      KAFKA_BROKER: kafka:9092
+      KAFKA_TOPIC: user_events
+    entrypoint:
+      - sh
+      - -c
+      - |
+        set -xe
+        until psql -h postgres -U root -c '\dt'; do echo "waiting for postgres..."; sleep 1; done
+        ./UserManagement    
+
 volumes:
   postgres-data:
