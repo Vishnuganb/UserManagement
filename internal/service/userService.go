@@ -53,18 +53,24 @@ func (s *UserService) listenToChannel(ctx context.Context) {
 				if err := s.CreateUser(ctx, req.CreateReq); err != nil {
 					log.Printf("Error processing user creation from channel: %v\n", err)
 					req.ResponseChannel <- err
+				} else {
+					req.ResponseChannel <- "User created successfully"
 				}
 			case "update_user":
 				log.Printf("Processing user update from channel: %+v\n", req.UpdateReq)
 				if _, err := s.UpdateUser(ctx, req.UpdateReq.UserID, req.UpdateReq.Req); err != nil {
 					log.Printf("Error processing user update: %v\n", err)
 					req.ResponseChannel <- err
+				} else {
+					req.ResponseChannel <- "User updated successfully"
 				}
 			case "delete_user":
 				log.Printf("Processing user deletion from channel: %+v\n", req.UserID)
 				if err := s.DeleteUser(ctx, req.UserID); err != nil {
 					log.Printf("Error processing user deletion: %v\n", err)
 					req.ResponseChannel <- err
+				} else {
+					req.ResponseChannel <- "User deleted successfully"
 				}
 			case "get_users":
 				log.Printf("Processing get users request from channel")

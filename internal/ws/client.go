@@ -74,6 +74,7 @@ func (c *Client) writeMessages() {
 	}()
 
 	ticker := time.NewTicker(pingInterval)
+	defer ticker.Stop() // Stop the ticker when the function exits
 
 	for {
 		select {
@@ -93,6 +94,7 @@ func (c *Client) writeMessages() {
 
 			if err := c.conn.WriteMessage(websocket.TextMessage, data); err != nil {
 				log.Printf("Failed to send message: %v", err)
+				return
 			}
 			log.Printf("message sent")
 
@@ -100,7 +102,7 @@ func (c *Client) writeMessages() {
 			log.Println("ping")
 
 			// send a Ping to the client
-			if err := c.conn.WriteMessage(websocket.PingMessage, []byte(``)); err != nil {
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				log.Printf("Failed to send ping: %v", err)
 				return
 			}

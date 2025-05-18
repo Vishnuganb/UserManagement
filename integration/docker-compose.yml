@@ -9,6 +9,11 @@ services:
       - "5433:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U root" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   kafka:
     image: confluentinc/cp-kafka:latest
@@ -19,6 +24,11 @@ services:
       - "9092:9092"
     env_file:
       - compose/kafka.env
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
 
   zookeeper:
     image: confluentinc/cp-zookeeper:latest
@@ -33,8 +43,10 @@ services:
     image: golang:1.24-alpine # Use the prebuilt Go image
     container_name: userManagementApp
     depends_on:
-      - postgres
-      - kafka
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     ports:
       - "8080:8080"
       - "8082:8082"

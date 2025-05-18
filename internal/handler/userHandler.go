@@ -128,19 +128,13 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 
 func writeJSON(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
-	switch v := data.(type) {
-	case error:
+	if _, ok := data.(error); ok {
 		w.WriteHeader(http.StatusBadRequest) // Use 400 for errors
-		response := map[string]string{"error": v.Error()}
-		if err := json.NewEncoder(w).Encode(response); err != nil {
-			log.Println("Failed to encode error response:", err)
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		}
-	default:
+	} else {
 		w.WriteHeader(http.StatusOK) // Use 200 for successful responses
-		if err := json.NewEncoder(w).Encode(data); err != nil {
-			log.Println("Failed to encode response:", err)
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		}
+	}
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		log.Println("Failed to encode response:", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
