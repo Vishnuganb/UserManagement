@@ -8,8 +8,10 @@ import (
 
 	_ "github.com/lib/pq"
 
+	sqlc "UserManagement/internal/db/sqlc"
 	"UserManagement/internal/handler"
 	"UserManagement/internal/kafka"
+	"UserManagement/internal/repository"
 	"UserManagement/internal/router"
 	"UserManagement/internal/service"
 	"UserManagement/internal/util"
@@ -34,7 +36,11 @@ func main() {
 	ctx := context.Background()
 	v := validator.NewValidator()
 	producer := kafka.NewProducer(config.KafkaBroker, config.KafkaTopic)
-	us := service.NewUserService(ctx, conn, v, producer)
+
+	// Initialize the repository
+	repo := repository.NewPostgresUserRepository(sqlc.New(conn))
+
+	us := service.NewUserService(ctx, repo, v, producer)
 	uh := handler.NewUserHandler(us)
 	r := router.NewRouter(uh)
 

@@ -23,7 +23,7 @@ func NewProducer(brokerAddr string, topic string) *Producer {
 	}
 }
 
-func (p *Producer) Publish(key, value string) error {
+func (p *Producer) NotifyUserCreated(key, value string) error {
 	err := p.writer.WriteMessages(context.Background(), kafka.Message{
 		Key:   []byte(key),
 		Value: []byte(value),
@@ -34,4 +34,4 @@ func (p *Producer) Publish(key, value string) error {
 	return err
 }
 
-var _ service.MessageProducer = (*Producer)(nil)
+var _ service.UserNotifier = (*Producer)(nil)

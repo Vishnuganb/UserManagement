@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"log"
@@ -11,6 +10,7 @@ import (
 
 	chi "github.com/go-chi/chi/v5"
 
+	"UserManagement/internal/errs"
 	"UserManagement/internal/model"
 )
 
@@ -35,10 +35,14 @@ func (h *UserHandler) handleRequest(w http.ResponseWriter, cudReq model.CUDReque
 	select {
 	case response := <-responseChan:
 		if err, ok := response.(error); ok {
-			if errors.Is(err, sql.ErrNoRows) {
+			switch {
+			case errors.Is(err, errs.ErrUserNotFound):
 				http.Error(w, "User Not Found", http.StatusNotFound)
-			} else {
-				http.Error(w, err.Error(), http.StatusBadRequest)
+			case errors.Is(err, errs.ErrDuplicateUser):
+				http.Error(w, "User Already Exists", http.StatusBadRequest)
+			default:
+				log.Println("Unhandled error: %v", err)
+				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			}
 			return
 		}
