@@ -41,6 +41,6 @@ test:
 integration-test:
 	docker compose exec usermanagement sh -c 'until nc -z kafka 9092; do echo "waiting for kafka..."; sleep 1; done'
 	docker compose exec usermanagement sh -c 'until nc -z postgres 5432; do echo "waiting for postgres..."; sleep 1; done'
-	docker compose exec usermanagement go test -v -tags integration -count=1 --timeout 300s $(TEST_OPTS) ./integration/...
+	docker compose exec usermanagement go test -v -tags integration -count=1 --timeout 300s $(TEST_OPTS) ./integration/suite/...
 
 .PHONY: pull up down bash ps logs test integration-test

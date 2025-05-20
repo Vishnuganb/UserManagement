@@ -5,14 +5,14 @@ package suite
 import (
 	"bytes"
 	"encoding/json"
-	"log"
 	"net/http"
+	"strconv"
 	"testing"
 	"time"
 
-	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
 
+	"UserManagement/integration/test_util"
 	"UserManagement/internal/util"
 )
 
@@ -22,13 +22,46 @@ const (
 	testTimeout  = 20 * time.Second
 )
 
-func TestCreateUserComponent(t *testing.T) {
-	// Start WebSocket connection
-	wsConn, _, err := websocket.DefaultDialer.Dial(websocketURL, nil)
+func setupWebSocket(t *testing.T) *test_util.WebSocketTestUtil {
+	wsUtil, err := test_util.NewWebSocketTestUtil(websocketURL)
 	if err != nil {
 		t.Fatalf("Failed to connect to WebSocket: %v", err)
 	}
-	defer wsConn.Close()
+	return wsUtil
+}
+
+func createUser(t *testing.T) int {
+	user := map[string]interface{}{
+		"first_name": util.RandomName(),
+		"last_name":  util.RandomName(),
+		"email":      util.RandomEmail(),
+		"phone":      util.RandomPhone(),
+		"age":        util.RandomAge(),
+		"status":     util.RandomStatus(),
+	}
+	payload, _ := json.Marshal(user)
+	resp, err := http.Post(restURL+"/users", "application/json", bytes.NewBuffer(payload))
+	if err != nil {
+		t.Fatalf("Failed to send REST request: %v", err)
+	}
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusCreated, resp.StatusCode, "Expected HTTP 201 Created")
+
+	var createdUser map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&createdUser); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+	userID, ok := createdUser["id"].(float64) // JSON numbers are decoded as float64
+	if !ok {
+		t.Fatalf("Invalid or missing user_id in response: %v", createdUser)
+	}
+	return int(userID)
+}
+
+func TestCreateUserComponent(t *testing.T) {
+	// Start WebSocket connection
+	wsUtil := setupWebSocket(t)
+	defer wsUtil.Close()
 
 	// Prepare REST request payload
 	user := map[string]interface{}{
@@ -55,18 +88,14 @@ func TestCreateUserComponent(t *testing.T) {
 	go func() {
 		defer close(done)
 		for {
-			_, message, err := wsConn.ReadMessage()
-			if err != nil {
-				log.Printf("WebSocket read error: %v", err)
-				return
+			msg, ok := wsUtil.GetMessages()
+			if !ok {
+				continue
 			}
-			log.Printf("WebSocket message received: %s", message)
 
 			// Validate WebSocket message
-			var response map[string]interface{}
-			_ = json.Unmarshal(message, &response)
-			if response["type"] == "user_list_updated" {
-				assert.Equal(t, "success", response["payload"], "Expected success payload")
+			if msg["type"] == "user_list_updated" {
+				assert.Equal(t, "success", msg["payload"], "Expected success payload")
 				return
 			}
 		}
@@ -81,11 +110,8 @@ func TestCreateUserComponent(t *testing.T) {
 
 func TestFetchUsersComponent(t *testing.T) {
 	// Start WebSocket connection
-	wsConn, _, err := websocket.DefaultDialer.Dial(websocketURL, nil)
-	if err != nil {
-		t.Fatalf("Failed to connect to WebSocket: %v", err)
-	}
-	defer wsConn.Close()
+	wsUtil := setupWebSocket(t)
+	defer wsUtil.Close()
 
 	//Send REST request
 	resp, err := http.Get(restURL + "/users")
@@ -100,46 +126,23 @@ func TestFetchUsersComponent(t *testing.T) {
 
 func TestUpdateUserComponent(t *testing.T) {
 	// Start WebSocket connection
-	wsConn, _, err := websocket.DefaultDialer.Dial(websocketURL, nil)
-	if err != nil {
-		t.Fatalf("Failed to connect to WebSocket: %v", err)
-	}
-	defer wsConn.Close()
+	wsUtil := setupWebSocket(t)
+	defer wsUtil.Close()
 
 	// Create User
-	user := map[string]interface{}{
-		"first_name": util.RandomName(),
-		"last_name":  util.RandomName(),
-		"email":      util.RandomEmail(),
-		"phone":      util.RandomPhone(),
-		"age":        util.RandomAge(),
-		"status":     util.RandomStatus(),
-	}
-	payload, _ := json.Marshal(user)
-	resp, err := http.Post(restURL+"/users", "application/json", bytes.NewBuffer(payload))
-	if err != nil {
-		t.Fatalf("Failed to send REST request: %v", err)
-	}
-	defer resp.Body.Close()
-	assert.Equal(t, http.StatusCreated, resp.StatusCode, "Expected HTTP 201 Created")
-
-	// Extract User ID from response
-	var createdUser string
-	if err := json.NewDecoder(resp.Body).Decode(&createdUser); err != nil {
-		t.Fatalf("Failed to decode response: %v", err)
-	}
+	userID := createUser(t)
 
 	updateUser := map[string]interface{}{
 		"first_name": util.RandomName(),
 	}
 	updateUserPayload, _ := json.Marshal(updateUser)
-	req, err := http.NewRequest(http.MethodPatch, restURL+"/users/2", bytes.NewBuffer(updateUserPayload))
+	req, err := http.NewRequest(http.MethodPatch, restURL+"/users/"+strconv.Itoa(userID), bytes.NewBuffer(updateUserPayload))
 	req.Header.Set("Content-Type", "application/json")
 	if err != nil {
 		t.Fatalf("Failed to create request: %v", err)
 	}
 	client := &http.Client{}
-	resp, err = client.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("Failed to send REST request: %v", err)
 	}
@@ -149,33 +152,16 @@ func TestUpdateUserComponent(t *testing.T) {
 
 func TestDeleteUserComponent(t *testing.T) {
 	// Start WebSocket connection
-	wsConn, _, err := websocket.DefaultDialer.Dial(websocketURL, nil)
-	if err != nil {
-		t.Fatalf("Failed to connect to WebSocket: %v", err)
-	}
-	defer wsConn.Close()
+	wsUtil := setupWebSocket(t)
+	defer wsUtil.Close()
 
 	// Create a user first
-	user := map[string]interface{}{
-		"first_name": util.RandomName(),
-		"last_name":  util.RandomName(),
-		"email":      util.RandomEmail(),
-		"phone":      util.RandomPhone(),
-		"age":        util.RandomAge(),
-		"status":     util.RandomStatus(),
-	}
-	payload, _ := json.Marshal(user)
-	resp, err := http.Post(restURL+"/users", "application/json", bytes.NewBuffer(payload))
-	if err != nil {
-		t.Fatalf("Failed to send REST request: %v", err)
-	}
-	defer resp.Body.Close()
-	assert.Equal(t, http.StatusCreated, resp.StatusCode, "Expected HTTP 201 Created")
+	userID := createUser(t)
 
 	// Delete the user
-	req, _ := http.NewRequest(http.MethodDelete, restURL+"/users/1", nil)
+	req, _ := http.NewRequest(http.MethodDelete, restURL+"/users/"+strconv.Itoa(userID), nil)
 	client := &http.Client{}
-	resp, err = client.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("Failed to send REST request: %v", err)
 	}
