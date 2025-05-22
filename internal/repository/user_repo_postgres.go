@@ -88,8 +88,12 @@ func (r *PostgresUserRepository) UpdateUserRepo(ctx context.Context, userID int6
 	return mapToModelUser(user), nil
 }
 
-func (r *PostgresUserRepository) DeleteUserRepo(ctx context.Context, userID int64) error {
-	return r.queries.DeleteUser(ctx, userID)
+func (r *PostgresUserRepository) DeleteUserRepo(ctx context.Context, userID int64) (model.User, error) {
+	user, err := r.queries.DeleteUser(ctx, userID)
+	if err != nil {
+		return model.User{}, err
+	}
+	return mapToModelUser(user), nil
 }
 
 func (r *PostgresUserRepository) ListUsersRepo(ctx context.Context) ([]model.User, error) {

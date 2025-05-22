@@ -23,6 +23,7 @@ SET
 WHERE user_id = $1
     RETURNING *;
 
--- name: DeleteUser :exec
+-- name: DeleteUser :one
 DELETE FROM users
-WHERE user_id = $1;
+WHERE user_id = $1
+    RETURNING *;

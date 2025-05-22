@@ -1,17 +1,14 @@
 package handler
 
 import (
+	"UserManagement/internal/errs"
+	"UserManagement/internal/model"
+	"UserManagement/internal/util"
+	"context"
 	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
-	"strconv"
-	"time"
-
-	chi "github.com/go-chi/chi/v5"
-
-	"UserManagement/internal/errs"
-	"UserManagement/internal/model"
 )
 
 type UserService interface {
@@ -27,7 +24,7 @@ func NewUserHandler(us UserService) *UserHandler {
 }
 
 // Common function to handle requests
-func (h *UserHandler) handleRequest(w http.ResponseWriter, cudReq model.CUDRequest, successStatus int) {
+func (h *UserHandler) handleRequest(ctx context.Context, w http.ResponseWriter, cudReq model.CUDRequest, successStatus int) {
 	responseChan := make(chan interface{})
 	cudReq.ResponseChannel = responseChan
 	h.us.QueueCUDRequest(cudReq)
@@ -48,73 +45,73 @@ func (h *UserHandler) handleRequest(w http.ResponseWriter, cudReq model.CUDReque
 		}
 		w.WriteHeader(successStatus)
 		writeJSON(w, response)
-	case <-time.After(5 * time.Second): // Timeout after 5 seconds
+	case <-ctx.Done():
 		http.Error(w, "Request timed out", http.StatusGatewayTimeout)
 	}
 }
 
+func (h *UserHandler) parseAndValidateUserID(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	userID, err := util.ParseAndValidateUserID(r)
+	if err != nil {
+		util.WriteJSONResponse(w, http.StatusBadRequest, util.APIResponse{
+			Status:  "error",
+			Message: err.Error(),
+		})
+		return 0, false
+	}
+	return userID, true
+}
+
 func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	var req model.CreateUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if !decodeJSON(w, r, &req) {
 		return
 	}
-	// Send the request to the channel for asynchronous processing
 	cudReq := model.CUDRequest{
 		Type:      "create_user",
 		CreateReq: req,
 	}
-	h.handleRequest(w, cudReq, http.StatusCreated)
+	h.handleRequest(r.Context(), w, cudReq, http.StatusCreated)
 }
 
-func (h *UserHandler) GetUsers(w http.ResponseWriter, _ *http.Request) {
+func (h *UserHandler) GetUsers(w http.ResponseWriter, r *http.Request) {
 	cudReq := model.CUDRequest{
 		Type: "get_users",
 	}
-	h.handleRequest(w, cudReq, http.StatusOK)
+	h.handleRequest(r.Context(), w, cudReq, http.StatusOK)
 }
 
 func (h *UserHandler) GetUserById(w http.ResponseWriter, r *http.Request) {
-	userIDStr := chi.URLParam(r, "id")
-	// Parse string to int64
-	userID, err := strconv.ParseInt(userIDStr, 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+	userID, ok := h.parseAndValidateUserID(w, r)
+	if !ok {
 		return
 	}
 	cudReq := model.CUDRequest{
 		Type:   "get_user",
 		UserID: userID,
 	}
-	h.handleRequest(w, cudReq, http.StatusOK)
+	h.handleRequest(r.Context(), w, cudReq, http.StatusOK)
 }
 
 func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
-	userIDStr := chi.URLParam(r, "id")
-	// Parse string to int64
-	userID, err := strconv.ParseInt(userIDStr, 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+	userID, ok := h.parseAndValidateUserID(w, r)
+	if !ok {
 		return
 	}
 	cudReq := model.CUDRequest{
 		Type:   "delete_user",
 		UserID: userID,
 	}
-	h.handleRequest(w, cudReq, http.StatusNoContent)
+	h.handleRequest(r.Context(), w, cudReq, http.StatusNoContent)
 }
 
 func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
-	userIDStr := chi.URLParam(r, "id")
-	// Parse string to int64
-	userID, err := strconv.ParseInt(userIDStr, 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+	userID, ok := h.parseAndValidateUserID(w, r)
+	if !ok {
 		return
 	}
 	var req model.UpdateUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	cudReq := model.CUDRequest{
@@ -127,7 +124,16 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 			Req:    req,
 		},
 	}
-	h.handleRequest(w, cudReq, http.StatusOK)
+	h.handleRequest(r.Context(), w, cudReq, http.StatusOK)
+}
+
+// Helper to decode JSON with error handling
+func decodeJSON(w http.ResponseWriter, r *http.Request, dest interface{}) bool {
+	if err := json.NewDecoder(r.Body).Decode(dest); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return false
+	}
+	return true
 }
 
 func writeJSON(w http.ResponseWriter, data interface{}) {

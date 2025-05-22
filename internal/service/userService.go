@@ -62,11 +62,11 @@ func (s *UserService) listenToChannel(ctx context.Context) {
 				}
 			case "delete_user":
 				log.Printf("Processing user deletion from channel: %+v\n", req.UserID)
-				if err := s.DeleteUser(ctx, req.UserID); err != nil {
+				if user, err := s.DeleteUser(ctx, req.UserID); err != nil {
 					log.Printf("Error processing user deletion: %v\n", err)
 					req.ResponseChannel <- err
 				} else {
-					req.ResponseChannel <- "User deleted successfully"
+					req.ResponseChannel <- user
 				}
 			case "get_users":
 				log.Printf("Processing get users request from channel")
@@ -151,11 +151,17 @@ func (s *UserService) GetUserById(ctx context.Context, userId int64) (model.User
 	return user, err
 }
 
-func (s *UserService) DeleteUser(ctx context.Context, userId int64) error {
+func (s *UserService) DeleteUser(ctx context.Context, userId int64) (model.User, error) {
 	// Create a new context with a deadline
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	return s.repo.DeleteUserRepo(ctx, userId)
+	user, err := s.repo.DeleteUserRepo(ctx, userId)
+	// Publish a message to Kafka
+	message := fmt.Sprintf("User %s deleted", user)
+	if err := s.notifier.NotifyUserCreated("user_deleted", message); err != nil {
+		log.Println("Failed to publish Kafka message:", err)
+	}
+	return user, err
 }
 
 func (s *UserService) UpdateUser(ctx context.Context, userId int64, req model.UpdateUserRequest) (model.User, error) {
@@ -164,5 +170,10 @@ func (s *UserService) UpdateUser(ctx context.Context, userId int64, req model.Up
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	user, err := s.repo.UpdateUserRepo(ctx, userId, req)
+	// Publish a message to Kafka
+	message := fmt.Sprintf("User %s created", user)
+	if err := s.notifier.NotifyUserCreated("user_updated", message); err != nil {
+		log.Println("Failed to publish Kafka message:", err)
+	}
 	return user, err
 }

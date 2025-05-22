@@ -94,7 +94,13 @@ func TestCreateUserComponent(t *testing.T) {
 			}
 
 			// Validate WebSocket message
-			if msg["type"] == "user_list_updated" {
+			if msg["type"] == "New User Created" {
+				assert.Equal(t, "success", msg["payload"], "Expected success payload")
+				return
+			} else if msg["type"] == "User Deleted" {
+				assert.Equal(t, "success", msg["payload"], "Expected success payload")
+				return
+			} else if msg["type"] == "User Updated" {
 				assert.Equal(t, "success", msg["payload"], "Expected success payload")
 				return
 			}
@@ -148,6 +154,36 @@ func TestUpdateUserComponent(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "Expected HTTP 200 OK")
+
+	// Listen for WebSocket response
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			msg, ok := wsUtil.GetMessages()
+			if !ok {
+				continue
+			}
+
+			// Validate WebSocket message
+			if msg["type"] == "New User Created" {
+				assert.Equal(t, "success", msg["payload"], "Expected success payload")
+				return
+			} else if msg["type"] == "User Deleted" {
+				assert.Equal(t, "success", msg["payload"], "Expected success payload")
+				return
+			} else if msg["type"] == "User Updated" {
+				assert.Equal(t, "success", msg["payload"], "Expected success payload")
+				return
+			}
+		}
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(testTimeout):
+		t.Fatal("Test timed out waiting for WebSocket response")
+	}
 }
 
 func TestDeleteUserComponent(t *testing.T) {
@@ -167,4 +203,34 @@ func TestDeleteUserComponent(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode, "Expected HTTP 204 No Content")
+
+	// Listen for WebSocket response
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			msg, ok := wsUtil.GetMessages()
+			if !ok {
+				continue
+			}
+
+			// Validate WebSocket message
+			if msg["type"] == "New User Created" {
+				assert.Equal(t, "success", msg["payload"], "Expected success payload")
+				return
+			} else if msg["type"] == "User Deleted" {
+				assert.Equal(t, "success", msg["payload"], "Expected success payload")
+				return
+			} else if msg["type"] == "User Updated" {
+				assert.Equal(t, "success", msg["payload"], "Expected success payload")
+				return
+			}
+		}
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(testTimeout):
+		t.Fatal("Test timed out waiting for WebSocket response")
+	}
 }

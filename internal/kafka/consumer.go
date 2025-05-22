@@ -29,7 +29,11 @@ func StartConsumer(brokerAddr, topic string, manager *ws.Manager) {
 
 			// Notify all clients when a user is created
 			if string(m.Key) == "user_created" {
-				manager.Broadcast("user_list_updated")
+				manager.Broadcast("New User Created")
+			} else if string(m.Key) == "user_deleted" {
+				manager.Broadcast("User Updated")
+			} else if string(m.Key) == "user_updated" {
+				manager.Broadcast("User Deleted")
 			}
 		}
 	}()
