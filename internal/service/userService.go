@@ -126,9 +126,7 @@ func (s *UserService) CreateUser(ctx context.Context, req model.CreateUserReques
 	}
 
 	// Publish a message to Kafka
-	if err := s.notifier.NotifyUserCreated("user_created", user); err != nil {
-		log.Println("Failed to publish Kafka message:", err)
-	}
+	s.notifyEvent("user_created", user)
 
 	return user, nil
 }
@@ -155,8 +153,8 @@ func (s *UserService) DeleteUser(ctx context.Context, userId int64) (model.User,
 	defer cancel()
 	user, err := s.repo.DeleteUserRepo(ctx, userId)
 	// Publish a message to Kafka
-	if err := s.notifier.NotifyUserCreated("user_deleted", user); err != nil {
-		log.Println("Failed to publish Kafka message:", err)
+	if err == nil {
+		s.notifyEvent("user_deleted", user)
 	}
 	return user, err
 }
@@ -168,8 +166,17 @@ func (s *UserService) UpdateUser(ctx context.Context, userId int64, req model.Up
 	defer cancel()
 	user, err := s.repo.UpdateUserRepo(ctx, userId, req)
 	// Publish a message to Kafka
-	if err := s.notifier.NotifyUserCreated("user_updated", user); err != nil {
-		log.Println("Failed to publish Kafka message:", err)
+	if err == nil {
+		s.notifyEvent("user_updated", user)
 	}
 	return user, err
+}
+
+func (s *UserService) notifyEvent(key string, value interface{}) {
+	if s.notifier == nil {
+		return
+	}
+	if err := s.notifier.NotifyUserCreated(key, value); err != nil {
+		log.Printf("Failed to publish Kafka message [%s]: %v\n", key, err)
+	}
 }

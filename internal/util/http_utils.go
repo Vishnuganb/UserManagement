@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+
+	chi "github.com/go-chi/chi/v5"
 )
 
 type APIResponse struct {
@@ -15,7 +17,7 @@ type APIResponse struct {
 
 // ParseAndValidateUserID parses and validates the user ID from the request.
 func ParseAndValidateUserID(r *http.Request) (int64, error) {
-	userIDStr := r.URL.Query().Get("id")
+	userIDStr := chi.URLParam(r, "id")
 	if userIDStr == "" {
 		return 0, errors.New("user ID is required")
 	}

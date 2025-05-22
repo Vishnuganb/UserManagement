@@ -1,14 +1,15 @@
 package handler
 
 import (
-	"UserManagement/internal/errs"
-	"UserManagement/internal/model"
-	"UserManagement/internal/util"
 	"context"
 	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
+
+	"UserManagement/internal/errs"
+	"UserManagement/internal/model"
+	"UserManagement/internal/util"
 )
 
 type UserService interface {

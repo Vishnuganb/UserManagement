@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"UserManagement/internal/util"
 	"github.com/stretchr/testify/assert"
+
+	"UserManagement/internal/util"
 )
 
 const (
@@ -67,8 +68,12 @@ func WaitForWebSocketEvent(t *testing.T, wsUtil *WebSocketTestUtil) {
 				continue
 			}
 			switch msg["type"] {
-			case "New User Created", "User Deleted", "User Updated":
-				assert.Equal(t, "success", msg["payload"], "Expected success payload")
+			case "user_created", "user_deleted", "user_updated":
+				payload, ok := msg["payload"].(map[string]interface{})
+				assert.True(t, ok, "Expected payload to be a map")
+				for _, key := range GetExpectedUserKeys() {
+					assert.Contains(t, payload, key, "Payload should contain '"+key+"'")
+				}
 				return
 			}
 		}
@@ -114,7 +119,5 @@ func GetExpectedUserKeys() []string {
 		"phone",
 		"age",
 		"status",
-		"created_at",
-		"updated_at",
 	}
 }

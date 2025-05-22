@@ -5,10 +5,11 @@ package suite
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/stretchr/testify/assert"
 	"net/http"
 	"strconv"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 
 	"UserManagement/integration/test_util"
 	"UserManagement/internal/util"
