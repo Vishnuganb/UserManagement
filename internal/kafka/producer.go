@@ -2,6 +2,7 @@ package kafka
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 
 	kafka "github.com/segmentio/kafka-go"
@@ -23,10 +24,16 @@ func NewProducer(brokerAddr string, topic string) *Producer {
 	}
 }
 
-func (p *Producer) NotifyUserCreated(key, value string) error {
-	err := p.writer.WriteMessages(context.Background(), kafka.Message{
+func (p *Producer) NotifyUserCreated(key string, value interface{}) error {
+	// Serialize the value to JSON
+	data, err := json.Marshal(value)
+	if err != nil {
+		log.Println("failed to serialize value:", err)
+		return err
+	}
+	err = p.writer.WriteMessages(context.Background(), kafka.Message{
 		Key:   []byte(key),
-		Value: []byte(value),
+		Value: data,
 	})
 	if err != nil {
 		log.Println("failed to publish message:", err)

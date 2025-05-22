@@ -102,7 +102,7 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		Type:   "delete_user",
 		UserID: userID,
 	}
-	h.handleRequest(r.Context(), w, cudReq, http.StatusNoContent)
+	h.handleRequest(r.Context(), w, cudReq, http.StatusOK)
 }
 
 func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {

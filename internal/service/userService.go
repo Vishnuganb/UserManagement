@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"time"
 
@@ -11,7 +10,7 @@ import (
 )
 
 type UserNotifier interface {
-	NotifyUserCreated(key, value string) error
+	NotifyUserCreated(key string, value interface{}) error
 }
 
 type Validator interface {
@@ -127,8 +126,7 @@ func (s *UserService) CreateUser(ctx context.Context, req model.CreateUserReques
 	}
 
 	// Publish a message to Kafka
-	message := fmt.Sprintf("User %s %s created", req.FirstName, req.LastName)
-	if err := s.notifier.NotifyUserCreated("user_created", message); err != nil {
+	if err := s.notifier.NotifyUserCreated("user_created", user); err != nil {
 		log.Println("Failed to publish Kafka message:", err)
 	}
 
@@ -157,8 +155,7 @@ func (s *UserService) DeleteUser(ctx context.Context, userId int64) (model.User,
 	defer cancel()
 	user, err := s.repo.DeleteUserRepo(ctx, userId)
 	// Publish a message to Kafka
-	message := fmt.Sprintf("User %s deleted", user)
-	if err := s.notifier.NotifyUserCreated("user_deleted", message); err != nil {
+	if err := s.notifier.NotifyUserCreated("user_deleted", user); err != nil {
 		log.Println("Failed to publish Kafka message:", err)
 	}
 	return user, err
@@ -171,8 +168,7 @@ func (s *UserService) UpdateUser(ctx context.Context, userId int64, req model.Up
 	defer cancel()
 	user, err := s.repo.UpdateUserRepo(ctx, userId, req)
 	// Publish a message to Kafka
-	message := fmt.Sprintf("User %s created", user)
-	if err := s.notifier.NotifyUserCreated("user_updated", message); err != nil {
+	if err := s.notifier.NotifyUserCreated("user_updated", user); err != nil {
 		log.Println("Failed to publish Kafka message:", err)
 	}
 	return user, err

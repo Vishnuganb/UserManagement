@@ -5,77 +5,34 @@ package suite
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/stretchr/testify/assert"
 	"net/http"
 	"strconv"
 	"testing"
-	"time"
-
-	"github.com/stretchr/testify/assert"
 
 	"UserManagement/integration/test_util"
 	"UserManagement/internal/util"
 )
 
-const (
-	restURL      = "http://localhost:8080"
-	websocketURL = "ws://localhost:8082/ws_users"
-	testTimeout  = 20 * time.Second
-)
+// --- Tests ----
 
 func setupWebSocket(t *testing.T) *test_util.WebSocketTestUtil {
-	wsUtil, err := test_util.NewWebSocketTestUtil(websocketURL)
-	if err != nil {
-		t.Fatalf("Failed to connect to WebSocket: %v", err)
-	}
+	// Start WebSocket connection
+	wsUtil := test_util.SetupWebSocket(t)
+	t.Cleanup(func() {
+		wsUtil.Close()
+	})
 	return wsUtil
 }
 
-func createUser(t *testing.T) int {
-	user := map[string]interface{}{
-		"first_name": util.RandomName(),
-		"last_name":  util.RandomName(),
-		"email":      util.RandomEmail(),
-		"phone":      util.RandomPhone(),
-		"age":        util.RandomAge(),
-		"status":     util.RandomStatus(),
-	}
-	payload, _ := json.Marshal(user)
-	resp, err := http.Post(restURL+"/users", "application/json", bytes.NewBuffer(payload))
-	if err != nil {
-		t.Fatalf("Failed to send REST request: %v", err)
-	}
-	defer resp.Body.Close()
-	assert.Equal(t, http.StatusCreated, resp.StatusCode, "Expected HTTP 201 Created")
-
-	var createdUser map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&createdUser); err != nil {
-		t.Fatalf("Failed to decode response: %v", err)
-	}
-	userID, ok := createdUser["id"].(float64) // JSON numbers are decoded as float64
-	if !ok {
-		t.Fatalf("Invalid or missing user_id in response: %v", createdUser)
-	}
-	return int(userID)
-}
-
 func TestCreateUserComponent(t *testing.T) {
-	// Start WebSocket connection
 	wsUtil := setupWebSocket(t)
-	defer wsUtil.Close()
 
 	// Prepare REST request payload
-	user := map[string]interface{}{
-		"first_name": util.RandomName(),
-		"last_name":  util.RandomName(),
-		"email":      util.RandomEmail(),
-		"phone":      util.RandomPhone(),
-		"age":        util.RandomAge(),
-		"status":     util.RandomStatus(),
-	}
-	payload, _ := json.Marshal(user)
+	payload, _ := json.Marshal(test_util.CreateUserPayload())
 
 	// Send REST request
-	resp, err := http.Post(restURL+"/users", "application/json", bytes.NewBuffer(payload))
+	resp, err := http.Post(test_util.RestURL+"/users", "application/json", bytes.NewBuffer(payload))
 	if err != nil {
 		t.Fatalf("Failed to send REST request: %v", err)
 	}
@@ -83,66 +40,38 @@ func TestCreateUserComponent(t *testing.T) {
 
 	assert.Equal(t, http.StatusCreated, resp.StatusCode, "Expected HTTP 201 Created")
 
+	// Validate response keys dynamically
+	test_util.ValidateResponseKeys(t, resp)
+
 	// Listen for WebSocket response
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		for {
-			msg, ok := wsUtil.GetMessages()
-			if !ok {
-				continue
-			}
-
-			// Validate WebSocket message
-			if msg["type"] == "New User Created" {
-				assert.Equal(t, "success", msg["payload"], "Expected success payload")
-				return
-			} else if msg["type"] == "User Deleted" {
-				assert.Equal(t, "success", msg["payload"], "Expected success payload")
-				return
-			} else if msg["type"] == "User Updated" {
-				assert.Equal(t, "success", msg["payload"], "Expected success payload")
-				return
-			}
-		}
-	}()
-
-	select {
-	case <-done:
-	case <-time.After(testTimeout):
-		t.Fatal("Test timed out waiting for WebSocket response")
-	}
+	test_util.WaitForWebSocketEvent(t, wsUtil)
 }
 
 func TestFetchUsersComponent(t *testing.T) {
-	// Start WebSocket connection
-	wsUtil := setupWebSocket(t)
-	defer wsUtil.Close()
-
 	//Send REST request
-	resp, err := http.Get(restURL + "/users")
-
+	resp, err := http.Get(test_util.RestURL + "/users")
 	if err != nil {
 		t.Fatalf("Failed to send REST request: %v", err)
 	}
 
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "Expected HTTP 200 OK")
+
+	// Validate response keys dynamically
+	test_util.ValidateResponseKeys(t, resp)
 }
 
 func TestUpdateUserComponent(t *testing.T) {
-	// Start WebSocket connection
 	wsUtil := setupWebSocket(t)
-	defer wsUtil.Close()
 
 	// Create User
-	userID := createUser(t)
+	userID := test_util.CreateUser(t)
 
 	updateUser := map[string]interface{}{
 		"first_name": util.RandomName(),
 	}
 	updateUserPayload, _ := json.Marshal(updateUser)
-	req, err := http.NewRequest(http.MethodPatch, restURL+"/users/"+strconv.Itoa(userID), bytes.NewBuffer(updateUserPayload))
+	req, err := http.NewRequest(http.MethodPatch, test_util.RestURL+"/users/"+strconv.Itoa(userID), bytes.NewBuffer(updateUserPayload))
 	req.Header.Set("Content-Type", "application/json")
 	if err != nil {
 		t.Fatalf("Failed to create request: %v", err)
@@ -155,82 +84,32 @@ func TestUpdateUserComponent(t *testing.T) {
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "Expected HTTP 200 OK")
 
+	// Validate response keys dynamically
+	test_util.ValidateResponseKeys(t, resp)
+
 	// Listen for WebSocket response
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		for {
-			msg, ok := wsUtil.GetMessages()
-			if !ok {
-				continue
-			}
-
-			// Validate WebSocket message
-			if msg["type"] == "New User Created" {
-				assert.Equal(t, "success", msg["payload"], "Expected success payload")
-				return
-			} else if msg["type"] == "User Deleted" {
-				assert.Equal(t, "success", msg["payload"], "Expected success payload")
-				return
-			} else if msg["type"] == "User Updated" {
-				assert.Equal(t, "success", msg["payload"], "Expected success payload")
-				return
-			}
-		}
-	}()
-
-	select {
-	case <-done:
-	case <-time.After(testTimeout):
-		t.Fatal("Test timed out waiting for WebSocket response")
-	}
+	test_util.WaitForWebSocketEvent(t, wsUtil)
 }
 
 func TestDeleteUserComponent(t *testing.T) {
-	// Start WebSocket connection
 	wsUtil := setupWebSocket(t)
-	defer wsUtil.Close()
 
 	// Create a user first
-	userID := createUser(t)
+	userID := test_util.CreateUser(t)
 
 	// Delete the user
-	req, _ := http.NewRequest(http.MethodDelete, restURL+"/users/"+strconv.Itoa(userID), nil)
+	req, _ := http.NewRequest(http.MethodDelete, test_util.RestURL+"/users/"+strconv.Itoa(userID), nil)
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("Failed to send REST request: %v", err)
 	}
 	defer resp.Body.Close()
-	assert.Equal(t, http.StatusNoContent, resp.StatusCode, "Expected HTTP 204 No Content")
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "Expected HTTP 200 OK")
+
+	// Validate response keys dynamically
+	test_util.ValidateResponseKeys(t, resp)
 
 	// Listen for WebSocket response
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		for {
-			msg, ok := wsUtil.GetMessages()
-			if !ok {
-				continue
-			}
-
-			// Validate WebSocket message
-			if msg["type"] == "New User Created" {
-				assert.Equal(t, "success", msg["payload"], "Expected success payload")
-				return
-			} else if msg["type"] == "User Deleted" {
-				assert.Equal(t, "success", msg["payload"], "Expected success payload")
-				return
-			} else if msg["type"] == "User Updated" {
-				assert.Equal(t, "success", msg["payload"], "Expected success payload")
-				return
-			}
-		}
-	}()
-
-	select {
-	case <-done:
-	case <-time.After(testTimeout):
-		t.Fatal("Test timed out waiting for WebSocket response")
-	}
+	test_util.WaitForWebSocketEvent(t, wsUtil)
 }

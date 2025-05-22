@@ -83,9 +83,9 @@ func TestUpdateUser(t *testing.T) {
 
 func TestDeleteUser(t *testing.T) {
 	user1 := createRandomUser(t)
-	err := testQueries.DeleteUser(context.Background(), user1.UserID)
+	user2, err := testQueries.DeleteUser(context.Background(), user1.UserID)
 	require.NoError(t, err)
-	user2, err := testQueries.GetUser(context.Background(), user1.UserID)
+	user2, err = testQueries.GetUser(context.Background(), user1.UserID)
 	require.Error(t, err)
 	require.Equal(t, err, sql.ErrNoRows)
 	require.Empty(t, user2)

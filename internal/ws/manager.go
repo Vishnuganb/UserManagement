@@ -113,13 +113,13 @@ func checkOrigin(r *http.Request) bool {
 	}
 }
 
-func (m *Manager) Broadcast(msgType string) {
+func (m *Manager) Broadcast(msgType string, payload interface{}) {
 	m.RLock()
 	defer m.RUnlock()
 	for client := range m.clients {
 		client.egress <- Message{
 			Type:    msgType,
-			Payload: "success",
+			Payload: payload,
 		}
 	}
 }
